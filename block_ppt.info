@@ -1,0 +1,6 @@
+name = kraus_ppt
+description = Для презентации
+core = 7.x
+
+dependencies[] = block
+dependencies[] = multiupload_imagefield_widget

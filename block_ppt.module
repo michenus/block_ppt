@@ -1,0 +1,410 @@
+<?php 
+/**
+ * Implements hook_block_info().
+ */
+function block_ppt_block_info() {
+  $blocks['block_ppt_block'] = array(
+    'info' => 'Презентация компании в блоке',
+    'cache' => DRUPAL_NO_CACHE
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_configure().
+ */
+function block_ppt_block_configure($delta = '') {
+  // This example comes from node.module.
+
+  $form = array();
+  if ($delta == 'block_ppt_block') {
+  	/*$vars = variable_get('block_ppt_settings', '');
+  	$vars = json_decode($vars);*/
+  	$form['block_ppt_settings'] = array(
+  		'#type' => 'fieldset',
+  		'#title' => 'Настройки слайдера', 
+		'#weight' => 5,
+		'#collapsible' => TRUE,
+		'#collapsed' => FALSE,
+  	);
+  	$form['block_ppt_settings']['ppt_count'] = array(
+  		'#type' => 'textfield',
+  		'#title' => 'Количество картинок в одной строке',
+	    '#default_value' => variable_get('block_ppt_img_count', 5),
+  	);
+  	$styles = image_styles();
+	  $options_style = array();
+  	foreach ($styles as $key => $style) {
+    	$options_style[$key] = $style['label'];
+  	}
+  	$form['block_ppt_settings']['ppt_style'] = array(
+	    '#type' => 'select',
+	    '#title' => 'Стиль изображений',
+	    '#options' => $options_style,
+	    '#default_value' => variable_get('block_ppt_img_style', 'large'),
+	    '#description' => 'Выбирете стиль изображений для превью и отображения в блоке слайдера. По умолчанию используется "Large (480x480)"',
+	  );
+  	$files = variable_get('block_ppt_images', NULL);
+    $files = (is_null($files)) ? NULL : json_decode($files);
+  	$files_get = $files;
+    $files_fid = $files;
+    if(!is_null($files)) {
+          $files = file_load_multiple($files_fid);
+          // Iterate through each database result.
+          $ppt_weigth = variable_get('block_ppt_img_weigth', '[]');
+          $ppt_weigth = json_decode($ppt_weigth);
+
+          $form['block_ppt_settings']['ppt_images_items'] = array(
+            '#tree' => TRUE,
+            '#theme' => 'formtable_form_table',
+          );
+          foreach ($files as $item) {
+            $img_info = array(
+              'style_name' => 'medium',
+              'path' => $item->uri,
+              'alt' => '',
+              'title' => ''
+            );
+            $fid = $item->fid;
+            $form['block_ppt_settings']['ppt_images_items'][$item->fid] = array(
+              'name' => array(
+                '#markup' => $item->filename,
+              ),
+              'description' => array(
+                '#markup' => theme('image_style', $img_info),
+              ),
+              'id' => array(
+                '#type' => 'textfield',
+                '#size' => 3,
+                '#default_value' => $item->fid,
+                '#disabled' => TRUE,
+              ),
+              'pid' => array(
+                // '#type' => 'hidden',
+                // '#default_value' => $item->pid,
+                '#type' => 'textfield',
+                '#size' => 3,
+                '#default_value' => $item->filename,
+              ),
+              'weight' => array(
+                '#type' => 'weight',
+                '#title' => t('Weight'),
+                '#default_value' => $ppt_weigth->$fid,
+                '#delta' => 10,
+                '#title_display' => 'invisible',
+              ),
+              'depth' => array(
+                '#type' => 'hidden',
+                '#value' => $item->fid,
+              ),
+            );
+          }
+    }
+    $form['block_ppt_settings']['ppt_images']  = array(
+      '#title' => 'Upload image',
+      '#type' => 'plupload',
+      '#upload_location' => 'public://',
+      '#default_value' => $files_fid,
+      '#upload_validators' => array(
+        'file_validate_is_image' => array(),
+        'file_validate_extensions' => array('png gif jpg jpeg'),
+        //'file_validate_size' => array(2 * 1024 * 1024),
+      ),
+    );
+  }
+  return $form;
+}
+/**
+ * Implements hook_theme().
+ */
+function block_ppt_theme($existing, $type, $theme, $path) {
+  return array(
+    'formtable_form_table' => array(
+      // The renderable element is the form.
+      'render element' => 'form',
+    ),
+  );
+}
+/**
+ * Theme callback for the form table.
+ */
+function theme_formtable_form_table(&$variables){
+  $form = $variables['form'];
+  $tree = element_children($form);
+  // Initialize the variable which will store our table rows.
+  $rows = array();
+
+  // Iterate over each element in our $form['example_items'] array.
+  foreach ($tree as $id) {
+
+    // Before we add our 'weight' column to the row, we need to give the
+    // element a custom class so that it can be identified in the
+    // drupal_add_tabledrag call.
+    //
+    // This could also have been done during the form declaration by adding
+    // '#attributes' => array('class' => 'example-item-weight'),
+    // directy to the 'weight' element in tabledrag_example_simple_form().
+    $form[$id]['weight']['#attributes']['class'] = array('example-item-weight');
+
+    // We are now ready to add each element of our $form data to the $rows
+    // array, so that they end up as individual table cells when rendered
+    // in the final table.  We run each element through the drupal_render()
+    // function to generate the final html markup for that element.
+    $rows[] = array(
+      'data' => array(
+        // Add our 'name' column.
+        drupal_render($form[$id]['name']),
+        // Add our 'description' column.
+        drupal_render($form[$id]['description']),
+        // Add our 'weight' column.
+        drupal_render($form[$id]['weight']),
+      ),
+      // To support the tabledrag behaviour, we need to assign each row of the
+      // table a class attribute of 'draggable'. This will add the 'draggable'
+      // class to the <tr> element for that row when the final table is
+      // rendered.
+      'class' => array('draggable'),
+    );
+  }
+
+  // We now define the table header values.  Ensure that the 'header' count
+  // matches the final column count for your table.
+  $header = array(t('Name'), t('Images'), t('Weight'));
+
+  // We also need to pass the drupal_add_tabledrag() function an id which will
+  // be used to identify the <table> element containing our tabledrag form.
+  // Because an element's 'id' should be unique on a page, make sure the value
+  // you select is NOT the same as the form ID used in your form declaration.
+  $table_id = 'example-items-table';
+
+  // We can render our tabledrag table for output.
+  $output = theme('table', array(
+    'header' => $header,
+    'rows' => $rows,
+    'attributes' => array('id' => $table_id),
+  ));
+
+  // And then render any remaining form elements (such as our submit button).
+  //$output .= drupal_render_children($form);
+
+  // We now call the drupal_add_tabledrag() function in order to add the
+  // tabledrag.js goodness onto our page.
+  //
+  // For a basic sortable table, we need to pass it:
+  // - the $table_id of our <table> element,
+  // - the $action to be performed on our form items ('order'),
+  // - a string describing where $action should be applied ('siblings'),
+  // - and the class of the element containing our 'weight' element.
+  drupal_add_tabledrag($table_id, 'order', 'sibling', 'example-item-weight');
+
+  return $output;
+}
+
+/**
+ * Implements hook_block_save($delta = '', $edit = array().
+ */
+function block_ppt_block_save($delta = '', $edit = array()) {
+  // This example comes from node.module.
+  /*
+   *if ($delta == 'recent') {
+   *  variable_set('node_recent_block_count', $edit['node_recent_block_count']);
+   *}
+   */
+  if($delta == 'block_ppt_block'){
+    global $user;
+    # СОХРАНЕНИЕ ИЗОБРАЖЕНИЙ
+    //dpm($edit);
+    if(count($edit['ppt_images']) > 0){
+      $files = array();
+      $scheme = 'public://'; 
+      foreach ($edit['ppt_images'] as $key => $file) {
+        # code...
+         if ($file['status'] == 'done') {
+          $source = $file['tmppath'];
+          $destination = file_stream_wrapper_uri_normalize($scheme . $file['name']);
+          $destination = file_unmanaged_move($source, $destination, FILE_EXISTS_RENAME);
+          $file = plupload_file_uri_to_object($destination);
+          file_save($file);
+          // Check the $file object to see if all necessary properties are set. Otherwise, use file_load($file->fid) to populate all of them.
+          // $file = file_load($file->fid);
+        }
+        /*
+        $file->status = FILE_STATUS_PERMANENT;
+        file_usage_add($file, 'user', 'user', $user->uid);
+        */
+        $files[] = $file->fid;
+      }
+      $files = (!isset($files)) ? '[]' : json_encode($files);
+      variable_set('block_ppt_images', $files);
+    }
+  	variable_set('block_ppt_img_count', $edit['ppt_count']);
+  	variable_set('block_ppt_img_style', $edit['ppt_style']);
+
+    $ppt_images = $edit['ppt_images_items'];
+    $ppt_weigth = array();
+    foreach ($ppt_images as $key => $value) {
+      # code...
+      $id = $value['id'];
+      $ppt_weigth[$id] = $value['weight'];
+    }
+    $ppt_weigth = json_encode($ppt_weigth);
+    variable_set('block_ppt_img_weigth', $ppt_weigth);
+
+  }
+
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function block_ppt_block_view($delta = '') {
+  $block = array();
+
+  switch ($delta) {
+    case 'block_ppt_block':
+     	$block['subject'] = 'Слайдер презентация';
+     	// загружаем файлы 
+      $files = variable_get('block_ppt_img_weigth', '[]');
+      $files = json_decode($files);
+      $als = array();
+      foreach ($files as $fid => $weigth) {
+        $als[$weigth] = $fid;
+      }
+      ksort($als);
+      $files = $als;
+  	  // Количество элементов с строке
+  		$count = variable_get('block_ppt_img_count', 5);
+      drupal_add_js(array('BlockPpt' => array('owlCount' => $count)), 'setting');
+  	  // стиль отображения с троце
+  	  	$img_style = variable_get('block_ppt_img_style', 'large');
+  	   // Получение изображений
+  	   $files = file_load_multiple($files);
+  	   $imgs = array();
+  	   $imgAndLink = array();
+  	 	 foreach ($files as $j => $file) {
+  	  		# code...
+  	  		$img_info = array(
+  	  			'style_name' => $img_style,
+  	  			'path' => $file->uri,
+  	  			'alt' => '',
+  	  			'title' => ''
+  	  		);
+  	  		$img = theme('image_style', $img_info);
+  	  		$link = file_create_url($file->uri);
+  	  		$imgs[] = l($img, $link, array(
+  	  			'attributes' => array('class' => array('colorbox'), 'rel' => 'blockpptx'),
+  	  			'html' => TRUE,
+  	  		));;
+  	  		$imgAndLink[] = array(
+  	  			'img' => $img,
+  	  			'link' => $link,
+  	  		);
+  	  	}
+       	$library = libraries_get_path('owlcarousel');
+       	$modulepath = drupal_get_path('module', 'block_ppt');
+      	$css = $library . '/assets/owl.carousel.min.css';
+		if (!file_exists($css)) {
+		  $css = $library . '/assets/owl.carousel.css';
+		}
+		$block['ImagesList'] = $imgAndLink;
+		$block['content'] = array(
+			'#markup' => block_ppt_block_display_content($imgs),
+			'#attached' => array(
+			'css' => array(
+				$css,
+				drupal_get_path('module', 'block_ppt') . '/css/owlcarousel.start.css',
+			),
+			'js' => array(
+					$library . '/owl.carousel.min.js',
+					$modulepath . '/js/owlcarousel.settings.js',
+					$modulepath . '/js/owlcarousel.start.js',
+				),
+			),
+		);
+      break;
+    
+  }
+  return $block;
+}
+
+/**
+* Вывод содерживого блока
+*/
+function block_ppt_block_display_content($imgs){
+	 return theme('item_list__owlline', array(
+			  'items' => $imgs,
+			  'title' => '',
+			  'attributes' => array(
+			  	'id' => 'pptx-line', 
+			  	//'class' => array('', '')
+			  ),
+			  'wrapper_attributes' => array(
+			  	'id' => 'pptx-line-wrapper', 
+			  	//'class' => array('', '')
+			  	),
+			));
+}
+
+/**
+* Тема вывода изображений в строке
+*/
+function block_ppt_item_list__owlline($variables) {
+  $items = $variables['items'];
+  $title = $variables['title'];
+  $type = $variables['type'];
+  $attributes = $variables['attributes'];
+
+  $wrapper_attributes = $variables['wrapper_attributes'];
+
+  if ( !isset($wrapper_attributes['class']) ) {
+    $wrapper_attributes['class'] = array('item-list');
+  }
+
+  // Use drupal attributes function to convert an array into HTML attributes
+  $output = '';
+  if (isset($title) && $title !== '') {
+    $output .= '' . $title . '';
+  }
+
+  if (!empty($items)) {
+    $output .= "";
+    $num_items = count($items);
+    $i = 0;
+    foreach ($items as $item) {
+      $attributes = array();
+      $children = array();
+      $data = '';
+      $i++;
+      if (is_array($item)) {
+        foreach ($item as $key => $value) {
+          if ($key == 'data') {
+            $data = $value;
+          }
+          elseif ($key == 'children') {
+            $children = $value;
+          }
+          else {
+            $attributes[$key] = $value;
+          }
+        }
+      }
+      else {
+        $data = $item;
+      }
+      if (count($children) > 0) {
+        // Render nested list.
+        $data .= theme_item_list(array('items' => $children, 'title' => NULL, 'type' => $type, 'attributes' => $attributes));
+      }
+      if ($i == 1) {
+        $attributes['class'][] = 'first';
+      }
+      if ($i == $num_items) {
+        $attributes['class'][] = 'last';
+      }
+      $output .= '' . $data . "\n";
+    }
+    $output .= "$type>";
+  }
+  $output .= '';
+  return $output;
+}
